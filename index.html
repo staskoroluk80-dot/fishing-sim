@@ -137,7 +137,8 @@
         color: 'white',
         speed: 4,
         fish: 0,
-        money: 0
+        money: 0,
+        isFishing: false // Новий стан: чи ловить гравець рибу
     };
 
     // Зони (Вода та Магазин)
@@ -168,6 +169,12 @@
     const stick = document.getElementById('stick');
     let touchId = null;
     let joyInput = { x: 0, y: 0 }; // Вектор руху (-1 до 1)
+
+    // Приховуємо мобільні елементи, якщо це ПК
+    if (!('ontouchstart' in window || navigator.maxTouchPoints > 0 || navigator.msMaxTouchPoints > 0)) {
+        document.getElementById('mobile-controls').style.display = 'none';
+    }
+
 
     joystick.addEventListener('touchstart', (e) => {
         e.preventDefault();
@@ -233,6 +240,8 @@
     }
 
     function handleAction() {
+        if (player.isFishing) return; // Не можна робити дію, якщо вже ловиш рибу
+
         // Перевірка: чи ми у воді?
         if (player.x < waterZone.w) {
             catchFish();
@@ -246,12 +255,17 @@
     }
 
     function catchFish() {
-        showMessage("🎣 Ловимо рибу...");
+        player.isFishing = true; // Позначаємо, що гравець ловить
+        player.color = 'green'; // Змінюємо колір гравця
+        showMessage("🎣 Вудка закинута...");
+
         setTimeout(() => {
             player.fish++;
             document.getElementById('fish-count').innerText = player.fish;
             showMessage("✅ Спіймав рибу!");
-        }, 1000); // Час ловлі
+            player.isFishing = false; // Завершили ловлю
+            player.color = 'white'; // Повертаємо колір гравця
+        }, 3000); // Час ловлі (3 секунди)
     }
 
     function sellFish() {
@@ -270,6 +284,8 @@
     }
 
     function update() {
+        if (player.isFishing) return; // Не рухаємо гравця, якщо він ловить рибу
+
         // Рух ПК
         if (keys.w) player.y -= player.speed;
         if (keys.s) player.y += player.speed;
@@ -311,13 +327,34 @@
         ctx.strokeStyle = "black";
         ctx.stroke();
 
-        // 4. Підказка
+        // 4. Малюємо вудку, якщо гравець ловить
+        if (player.isFishing) {
+            ctx.beginPath();
+            ctx.moveTo(player.x, player.y); // Початок вудки (від гравця)
+            ctx.lineTo(waterZone.w / 2, canvas.height / 2); // Кінець вудки (в центр води)
+            ctx.strokeStyle = "gray";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Додаємо кружечок як поплавок
+            ctx.beginPath();
+            ctx.arc(waterZone.w / 2, canvas.height / 2, 5, 0, Math.PI * 2);
+            ctx.fillStyle = "red";
+            ctx.fill();
+            ctx.strokeStyle = "black";
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        }
+
+        // 5. Підказка
         ctx.fillStyle = "black";
         ctx.font = "14px Arial";
-        if (player.x < waterZone.w) {
-            ctx.fillText("Тисни ДІЮ щоб ловити", player.x + 25, player.y);
-        } else if (player.x > shopZone.x) {
-            ctx.fillText("Тисни ДІЮ щоб продати", player.x - 180, player.y);
+        if (!player.isFishing) { // Показуємо підказки тільки коли не ловимо
+            if (player.x < waterZone.w) {
+                ctx.fillText("Тисни ДІЮ щоб ловити", player.x + 25, player.y);
+            } else if (player.x > shopZone.x) {
+                ctx.fillText("Тисни ДІЮ щоб продати", player.x - 180, player.y);
+            }
         }
     }
 

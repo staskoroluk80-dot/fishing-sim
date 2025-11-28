@@ -52,7 +52,7 @@
             border: 2px solid rgba(255, 255, 255, 0.3);
             border-radius: 50%;
             position: relative;
-            pointer-events: auto; /* Вмикаємо дотик */
+            pointer-events: auto; /* Вмикаємо дотик/клік */
         }
 
         /* Стік джойстика */
@@ -79,7 +79,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            pointer-events: auto; /* Вмикаємо дотик */
+            pointer-events: auto; /* Вмикаємо дотик/клік */
             user-select: none;
         }
 
@@ -145,7 +145,7 @@
     const waterZone = { x: 0, y: 0, w: 200, h: canvas.height, color: '#2196F3' }; // Ліворуч
     const shopZone = { x: canvas.width - 200, y: 0, w: 200, h: canvas.height, color: '#795548' }; // Праворуч
     
-    // Нова константа: радіус, у якому можна ловити рибу від краю води
+    // Радіус, у якому можна ловити рибу від краю води
     const FISHING_RANGE = player.size * 1.5; 
 
     // --- КЕРУВАННЯ ---
@@ -173,21 +173,36 @@
     let touchId = null;
     let joyInput = { x: 0, y: 0 }; 
 
-    // Приховуємо мобільні елементи, якщо це ПК
-    if (!('ontouchstart' in window || navigator.maxTouchPoints > 0 || navigator.msMaxTouchPoints > 0)) {
-        document.getElementById('mobile-controls').style.display = 'none';
-    }
+    // Для роботи на ПК (клік мишею) та на телефоні (дотик)
+    const startEvents = ['touchstart', 'mousedown'];
+    const moveEvents = ['touchmove', 'mousemove'];
+    const endEvents = ['touchend', 'mouseup'];
 
+    let isDragging = false;
+
+    // ОБРОБНИК СТАРТУ (Touch / Mouse Down)
+    joystick.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        isDragging = true;
+        updateJoystick(e);
+    });
 
     joystick.addEventListener('touchstart', (e) => {
         e.preventDefault();
         const touch = e.changedTouches[0];
         touchId = touch.identifier;
+        isDragging = true;
         updateJoystick(touch);
     });
 
-    joystick.addEventListener('touchmove', (e) => {
-        e.preventDefault();
+    // ОБРОБНИК РУХУ (Touch Move / Mouse Move)
+    window.addEventListener('mousemove', (e) => {
+        if (isDragging && touchId === null) {
+            updateJoystick(e);
+        }
+    });
+
+    window.addEventListener('touchmove', (e) => {
         for (let i = 0; i < e.changedTouches.length; i++) {
             if (e.changedTouches[i].identifier === touchId) {
                 updateJoystick(e.changedTouches[i]);
@@ -196,21 +211,42 @@
         }
     });
 
-    joystick.addEventListener('touchend', (e) => {
-        e.preventDefault();
-        // Скидання джойстика
-        stick.style.transform = `translate(-50%, -50%)`;
-        joyInput = { x: 0, y: 0 };
-        touchId = null;
+    // ОБРОБНИК КІНЦЯ (Touch End / Mouse Up)
+    window.addEventListener('mouseup', (e) => {
+        if (isDragging) {
+            resetJoystick();
+        }
+    });
+    
+    window.addEventListener('touchend', (e) => {
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            if (e.changedTouches[i].identifier === touchId) {
+                resetJoystick();
+                break;
+            }
+        }
     });
 
-    function updateJoystick(touch) {
+    function resetJoystick() {
+        stick.style.transform = `translate(-50%, -50%)`;
+        joyInput = { x: 0, y: 0 };
+        isDragging = false;
+        touchId = null;
+    }
+
+    function updateJoystick(input) {
+        // Визначаємо вхідні дані (для миші clientX/Y, для дотику clientX/Y)
+        const clientX = input.clientX || input.pageX;
+        const clientY = input.clientY || input.pageY;
+
         const rect = joystick.getBoundingClientRect();
         const centerX = rect.left + rect.width / 2;
         const centerY = rect.top + rect.height / 2;
 
-        let dx = touch.clientX - centerX;
-        let dy = touch.clientY - centerY;
+        let dx = clientX - centerX;
+        let dy = clientY - centerY;
+        
+        // Обмеження радіусу
         const distance = Math.min(Math.sqrt(dx*dx + dy*dy), rect.width/2);
         const angle = Math.atan2(dy, dx);
 
@@ -232,6 +268,15 @@
         e.target.style.background = 'rgba(255, 255, 255, 0.3)';
         setTimeout(() => e.target.style.background = 'rgba(255, 0, 0, 0.5)', 100);
     });
+    
+    document.getElementById('action-btn').addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        handleAction();
+        // Ефект натискання
+        e.target.style.background = 'rgba(255, 255, 255, 0.3)';
+        setTimeout(() => e.target.style.background = 'rgba(255, 0, 0, 0.5)', 100);
+    });
+
 
     // --- ЛОГІКА ГРИ ---
     

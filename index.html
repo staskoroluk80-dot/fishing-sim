@@ -7,19 +7,17 @@
     <style>
         body {
             margin: 0;
-            overflow: hidden; /* Заборона прокрутки на телефоні */
+            overflow: hidden; 
             background-color: #333;
             font-family: Arial, sans-serif;
-            touch-action: none; /* Важливо для джойстика */
+            touch-action: none; 
         }
 
-        /* Ігровий екран */
         canvas {
             display: block;
-            background-color: #4CAF50; /* Колір трави */
+            background-color: #4CAF50; /* Трава */
         }
 
-        /* Інтерфейс (UI) */
         #ui-layer {
             position: absolute;
             top: 10px;
@@ -31,7 +29,6 @@
             pointer-events: none;
         }
 
-        /* Керування для мобільних */
         #mobile-controls {
             position: absolute;
             bottom: 20px;
@@ -41,10 +38,9 @@
             justify-content: space-between;
             padding: 0 20px;
             box-sizing: border-box;
-            pointer-events: none; /* Щоб кліки проходили крізь контейнер */
+            pointer-events: none;
         }
 
-        /* Джойстик (Зона) */
         .joystick-area {
             width: 120px;
             height: 120px;
@@ -52,10 +48,9 @@
             border: 2px solid rgba(255, 255, 255, 0.3);
             border-radius: 50%;
             position: relative;
-            pointer-events: auto; /* Вмикаємо дотик/клік */
+            pointer-events: auto; 
         }
 
-        /* Стік джойстика */
         .joystick-stick {
             width: 50px;
             height: 50px;
@@ -67,7 +62,6 @@
             transform: translate(-50%, -50%);
         }
 
-        /* Кнопка дії */
         .action-btn {
             width: 100px;
             height: 100px;
@@ -79,7 +73,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            pointer-events: auto; /* Вмикаємо дотик/клік */
+            pointer-events: auto; 
             user-select: none;
         }
 
@@ -87,7 +81,6 @@
             background: rgba(255, 255, 255, 0.3);
         }
 
-        /* Підказки */
         #message {
             position: absolute;
             top: 50%;
@@ -125,28 +118,40 @@
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     
-    // Розміри на весь екран
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
-    // Стан гравця
     const player = {
         x: canvas.width / 2,
         y: canvas.height / 2,
-        size: 20,
-        color: 'white',
+        size: 40, 
         speed: 4,
         fish: 0,
         money: 0,
         isFishing: false 
     };
 
+    // Завантаження зображення персонажа
+    const playerImage = new Image();
+    playerImage.src = 'Buzz_fisherman.png'; 
+    let playerImageLoaded = false;
+
+    playerImage.onload = () => {
+        playerImageLoaded = true;
+        gameLoop(); 
+    };
+
+    playerImage.onerror = () => {
+        console.error("Помилка завантаження зображення 'Buzz_fisherman.png'.");
+        playerImageLoaded = false; 
+        gameLoop(); 
+    };
+
     // Зони (Вода та Магазин)
-    const waterZone = { x: 0, y: 0, w: 200, h: canvas.height, color: '#2196F3' }; // Ліворуч
-    const shopZone = { x: canvas.width - 200, y: 0, w: 200, h: canvas.height, color: '#795548' }; // Праворуч
+    const waterZone = { x: 0, y: 0, w: 200, h: canvas.height, color: '#2196F3' }; 
+    const shopZone = { x: canvas.width - 200, y: 0, w: 200, h: canvas.height, color: '#795548' }; 
     
-    // Радіус, у якому можна ловити рибу від краю води
-    const FISHING_RANGE = player.size * 1.5; 
+    const FISHING_RANGE = player.size * 0.75; 
 
     // --- КЕРУВАННЯ ---
     const keys = { w: false, a: false, s: false, d: false };
@@ -157,7 +162,7 @@
         if(e.key === 'a' || e.key === 'A') keys.a = true;
         if(e.key === 's' || e.key === 'S') keys.s = true;
         if(e.key === 'd' || e.key === 'D') keys.d = true;
-        if(e.key === ' ') handleAction(); // Пробіл
+        if(e.key === ' ') handleAction(); 
     });
 
     window.addEventListener('keyup', (e) => {
@@ -167,20 +172,14 @@
         if(e.key === 'd' || e.key === 'D') keys.d = false;
     });
 
-    // --- ДЖОЙСТИК (ТЕЛЕФОН) ---
+    // --- ДЖОЙСТИК ---
     const joystick = document.getElementById('joystick');
     const stick = document.getElementById('stick');
     let touchId = null;
     let joyInput = { x: 0, y: 0 }; 
-
-    // Для роботи на ПК (клік мишею) та на телефоні (дотик)
-    const startEvents = ['touchstart', 'mousedown'];
-    const moveEvents = ['touchmove', 'mousemove'];
-    const endEvents = ['touchend', 'mouseup'];
-
     let isDragging = false;
 
-    // ОБРОБНИК СТАРТУ (Touch / Mouse Down)
+    // Обробники для миші та дотику
     joystick.addEventListener('mousedown', (e) => {
         e.preventDefault();
         isDragging = true;
@@ -195,7 +194,6 @@
         updateJoystick(touch);
     });
 
-    // ОБРОБНИК РУХУ (Touch Move / Mouse Move)
     window.addEventListener('mousemove', (e) => {
         if (isDragging && touchId === null) {
             updateJoystick(e);
@@ -211,9 +209,8 @@
         }
     });
 
-    // ОБРОБНИК КІНЦЯ (Touch End / Mouse Up)
     window.addEventListener('mouseup', (e) => {
-        if (isDragging) {
+        if (isDragging && touchId === null) {
             resetJoystick();
         }
     });
@@ -235,7 +232,6 @@
     }
 
     function updateJoystick(input) {
-        // Визначаємо вхідні дані (для миші clientX/Y, для дотику clientX/Y)
         const clientX = input.clientX || input.pageX;
         const clientY = input.clientY || input.pageY;
 
@@ -246,7 +242,6 @@
         let dx = clientX - centerX;
         let dy = clientY - centerY;
         
-        // Обмеження радіусу
         const distance = Math.min(Math.sqrt(dx*dx + dy*dy), rect.width/2);
         const angle = Math.atan2(dy, dx);
 
@@ -255,16 +250,14 @@
 
         stick.style.transform = `translate(calc(-50% + ${moveX}px), calc(-50% + ${moveY}px))`;
 
-        // Нормалізація (-1 до 1)
         joyInput.x = moveX / (rect.width/2);
         joyInput.y = moveY / (rect.height/2);
     }
 
-    // Кнопка Дії (Телефон)
+    // Кнопка Дії (для дотику та кліку мишею)
     document.getElementById('action-btn').addEventListener('touchstart', (e) => {
         e.preventDefault();
         handleAction();
-        // Ефект натискання
         e.target.style.background = 'rgba(255, 255, 255, 0.3)';
         setTimeout(() => e.target.style.background = 'rgba(255, 0, 0, 0.5)', 100);
     });
@@ -272,7 +265,6 @@
     document.getElementById('action-btn').addEventListener('mousedown', (e) => {
         e.preventDefault();
         handleAction();
-        // Ефект натискання
         e.target.style.background = 'rgba(255, 255, 255, 0.3)';
         setTimeout(() => e.target.style.background = 'rgba(255, 0, 0, 0.5)', 100);
     });
@@ -290,9 +282,8 @@
     function handleAction() {
         if (player.isFishing) return; 
 
-        // Координата X, де має стояти центр гравця, щоб торкатися води
-        const fishingSpotX = waterZone.w + player.size;
-        // Відстань від центру гравця до ідеальної точки для риболовлі
+        // Центр гравця, коли він стоїть на березі
+        const fishingSpotX = waterZone.w + player.size / 2; 
         const distanceToFishingSpot = Math.abs(player.x - fishingSpotX);
 
         // 1. Риболовля (якщо стоїть близько до берега)
@@ -309,7 +300,6 @@
 
     function catchFish() {
         player.isFishing = true; 
-        player.color = 'green'; 
         showMessage("🎣 Вудка закинута...");
 
         setTimeout(() => {
@@ -317,7 +307,6 @@
             document.getElementById('fish-count').innerText = player.fish;
             showMessage("✅ Спіймав рибу!");
             player.isFishing = false; 
-            player.color = 'white'; 
         }, 3000); 
     }
 
@@ -337,12 +326,11 @@
     }
 
     function update() {
-        if (player.isFishing) return; // Не рухаємо, якщо ловить
+        if (player.isFishing) return; 
 
         let dx = 0;
         let dy = 0;
 
-        // Розрахунок руху з клавіш/джойстика
         if (keys.w) dy -= player.speed;
         if (keys.s) dy += player.speed;
         if (keys.a) dx -= player.speed;
@@ -354,18 +342,16 @@
         let newX = player.x + dx;
         let newY = player.y + dy;
 
-        // --- БЛОКУВАННЯ ВХОДУ У ВОДУ ---
-        // Якщо лівий край гравця (newX - player.size) менший за край води (waterZone.w)
-        if (newX - player.size < waterZone.w) {
-            newX = waterZone.w + player.size; // Зупиняємо гравця на кордоні
+        // БЛОКУВАННЯ ВХОДУ У ВОДУ (лівий край зображення)
+        if (newX - player.size / 2 < waterZone.w) {
+            newX = waterZone.w + player.size / 2; 
         }
-        // -------------------------------
         
         // Обмеження екрану
-        if (newX < player.size) newX = player.size; 
-        if (newX > canvas.width - player.size) newX = canvas.width - player.size;
-        if (newY < player.size) newY = player.size;
-        if (newY > canvas.height - player.size) newY = canvas.height - player.size;
+        if (newX < player.size / 2) newX = player.size / 2; 
+        if (newX > canvas.width - player.size / 2) newX = canvas.width - player.size / 2;
+        if (newY < player.size / 2) newY = player.size / 2;
+        if (newY > canvas.height - player.size / 2) newY = canvas.height - player.size / 2;
 
         player.x = newX;
         player.y = newY;
@@ -374,37 +360,41 @@
     function draw() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // 1. Малюємо Воду
+        // 1. Малюємо Воду та Магазин
         ctx.fillStyle = waterZone.color;
         ctx.fillRect(waterZone.x, waterZone.y, waterZone.w, waterZone.h);
         ctx.fillStyle = "white";
         ctx.font = "20px Arial";
         ctx.fillText("ВОДА", 20, canvas.height/2);
 
-        // 2. Малюємо Магазин
         ctx.fillStyle = shopZone.color;
         ctx.fillRect(shopZone.x, shopZone.y, shopZone.w, shopZone.h);
         ctx.fillStyle = "white";
         ctx.fillText("МАГАЗИН", canvas.width - 150, canvas.height/2);
 
-        // 3. Малюємо Гравця
-        ctx.beginPath();
-        ctx.arc(player.x, player.y, player.size, 0, Math.PI * 2);
-        ctx.fillStyle = player.color;
-        ctx.fill();
-        ctx.strokeStyle = "black";
-        ctx.stroke();
+        // 2. Малюємо Гравця (зображення)
+        if (playerImageLoaded) {
+            ctx.drawImage(playerImage, player.x - player.size / 2, player.y - player.size / 2, player.size, player.size);
+        } else {
+            // Тимчасовий круг, якщо зображення немає
+            ctx.beginPath();
+            ctx.arc(player.x, player.y, player.size / 2, 0, Math.PI * 2);
+            ctx.fillStyle = 'gray'; 
+            ctx.fill();
+            ctx.strokeStyle = "black";
+            ctx.stroke();
+        }
 
-        // 4. Малюємо вудку, якщо гравець ловить
+        // 3. Малюємо вудку
         if (player.isFishing) {
             ctx.beginPath();
-            ctx.moveTo(player.x, player.y); // Початок вудки (від гравця)
-            ctx.lineTo(waterZone.w / 2, canvas.height / 2); // Кінець вудки (в центр води)
+            ctx.moveTo(player.x, player.y - player.size / 4); 
+            ctx.lineTo(waterZone.w / 2, canvas.height / 2); 
             ctx.strokeStyle = "gray";
             ctx.lineWidth = 2;
             ctx.stroke();
 
-            // Додаємо кружечок як поплавок
+            // Поплавок
             ctx.beginPath();
             ctx.arc(waterZone.w / 2, canvas.height / 2, 5, 0, Math.PI * 2);
             ctx.fillStyle = "red";
@@ -414,21 +404,19 @@
             ctx.stroke();
         }
 
-        // 5. Підказка
+        // 4. Підказки
         ctx.fillStyle = "black";
         ctx.font = "14px Arial";
 
-        const fishingSpotX = waterZone.w + player.size;
+        const fishingSpotX = waterZone.w + player.size / 2;
         const distanceToFishingSpot = Math.abs(player.x - fishingSpotX);
 
         if (!player.isFishing) { 
-            // Підказка про риболовлю, якщо гравець близько
             if (distanceToFishingSpot < FISHING_RANGE * 2) {
-                ctx.fillText("Тисни ДІЮ щоб ловити", player.x + 25, player.y);
+                ctx.fillText("Тисни ДІЮ щоб ловити", player.x + player.size / 2 + 5, player.y);
             } 
-            // Підказка про продаж
             else if (player.x > shopZone.x) {
-                ctx.fillText("Тисни ДІЮ щоб продати", player.x - 180, player.y);
+                ctx.fillText("Тисни ДІЮ щоб продати", player.x - player.size / 2 - 100, player.y);
             }
         }
     }
@@ -444,14 +432,16 @@
     window.addEventListener('resize', () => {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
-        // Оновлюємо позицію магазину при ресайзі
         shopZone.x = canvas.width - 200;
         shopZone.h = canvas.height;
         waterZone.h = canvas.height;
     });
 
-    // Старт
-    gameLoop();
+    // Запускаємо гру, якщо зображення вже завантажено
+    if (playerImageLoaded) { 
+        gameLoop();
+    }
+    // Інакше гра запуститься після завантаження в playerImage.onload або playerImage.onerror
 
 </script>
 </body>

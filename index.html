@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>2D Рибалка Симулятор</title>
+    <title>2D Рибалка Симулятор (Сцени)</title>
     <style>
         body {
             margin: 0;
@@ -98,32 +98,6 @@
         .action-btn:active {
             background: rgba(255, 255, 255, 0.3);
         }
-
-        /* --- Інтерфейс магазину --- */
-        #shop-ui {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.8);
-            color: white;
-            display: none; /* Приховано за замовчуванням */
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            z-index: 20;
-        }
-
-        .shop-box {
-            background: #795548;
-            padding: 20px;
-            margin: 10px;
-            border: 3px solid #ccc;
-            border-radius: 8px;
-            text-align: center;
-            cursor: pointer;
-        }
     </style>
 </head>
 <body>
@@ -134,17 +108,6 @@
     </div>
 
     <div id="message"></div>
-
-    <div id="shop-ui">
-        <h2>Продати Рибу</h2>
-        <p>Натисніть кнопку ДІЯ, щоб продати усю рибу (10 монет за шт).</p>
-        <div class="shop-box">
-            <h3>📦 Ящик для продажу</h3>
-            <p>Ваша риба: <span id="shop-fish-count">0</span></p>
-        </div>
-        <p>Натисніть ESC або кнопку ВІДМІНА, щоб вийти.</p>
-        <div class="action-btn" id="shop-exit-btn" style="background: #00bcd4; margin-top: 20px; pointer-events: auto;">ВІДМІНА</div>
-    </div>
 
     <div id="mobile-controls">
         <div class="joystick-area" id="joystick">
@@ -164,6 +127,8 @@
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
+    let currentScene = 'shore'; // Нова змінна: 'shore' (берег) або 'shop' (магазин)
+
     const player = {
         x: canvas.width / 2,
         y: canvas.height / 2,
@@ -172,18 +137,32 @@
         fish: 0,
         money: 0,
         isFishing: false,
-        isInShop: false // Новий стан
     };
 
-    // Розміри зон у відсотках (буде перераховано у пікселі)
+    // Розміри зон у відсотках (забезпечує коректне відображення на телефонах)
     const ZONE_WIDTH_PERCENT = 0.20; 
     let zoneWidth = canvas.width * ZONE_WIDTH_PERCENT;
 
-    // Зони (Вода та Магазин)
+    // Зони Берега
     const waterZone = { x: 0, y: 0, w: zoneWidth, h: canvas.height, color: '#2196F3' }; 
-    const shopZone = { x: canvas.width - zoneWidth, y: 0, w: zoneWidth, h: canvas.height, color: '#795548' }; 
+    const shopEntranceZone = { x: canvas.width - zoneWidth, y: 0, w: zoneWidth, h: canvas.height, color: '#795548' }; 
     
+    // Зони Магазину
+    const shopInterior = { 
+        color: '#3A3A3A', // Темний інтер'єр
+        exitX: canvas.width / 2, 
+        exitY: canvas.height - 50, // Зона виходу внизу
+    };
+
+    const sellCrates = {
+        x: canvas.width / 2, 
+        y: canvas.height / 3, // Ящики у верхній частині
+        size: 80,
+        color: '#B5651D' // Коричневий
+    };
+
     const FISHING_RANGE = player.size * 0.75; 
+    const INTERACT_RANGE = player.size * 1.5; // Радіус взаємодії
 
     // Завантаження зображення персонажа
     const playerImage = new Image();
@@ -208,20 +187,22 @@
     function updateZoneDimensions() {
         zoneWidth = canvas.width * ZONE_WIDTH_PERCENT;
         waterZone.w = zoneWidth;
-        shopZone.x = canvas.width - zoneWidth;
-        shopZone.w = zoneWidth;
+        shopEntranceZone.x = canvas.width - zoneWidth;
+        shopEntranceZone.w = zoneWidth;
         waterZone.h = canvas.height;
-        shopZone.h = canvas.height;
+        shopEntranceZone.h = canvas.height;
+
+        // Оновлення позицій у магазині
+        shopInterior.exitX = canvas.width / 2; 
+        shopInterior.exitY = canvas.height - 50;
+        sellCrates.x = canvas.width / 2;
+        sellCrates.y = canvas.height / 3;
     }
 
     // --- КЕРУВАННЯ ---
     const keys = { w: false, a: false, s: false, d: false };
     
-    // Вхід/Вихід з магазину клавішею ESC
     window.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' || e.key === 'Esc') {
-            if (player.isInShop) exitShop();
-        }
         if(e.key === 'w' || e.key === 'W') keys.w = true;
         if(e.key === 'a' || e.key === 'A') keys.a = true;
         if(e.key === 's' || e.key === 'S') keys.s = true;
@@ -236,14 +217,14 @@
         if(e.key === 'd' || e.key === 'D') keys.d = false;
     });
 
-    // --- ДЖОЙСТИК (скорочено, логіка тач/миша залишена коректною) ---
+    // --- ДЖОЙСТИК ТА ЕКШЕН КНОПКА ---
     const joystick = document.getElementById('joystick');
     const stick = document.getElementById('stick');
     let touchId = null;
     let joyInput = { x: 0, y: 0 }; 
     let isDragging = false;
 
-    // Скидання джойстика
+    // ... (Джойстик тач/миша логіка залишається без змін) ...
     function resetJoystick() {
         stick.style.transform = `translate(-50%, -50%)`;
         joyInput = { x: 0, y: 0 };
@@ -251,7 +232,6 @@
         touchId = null;
     }
 
-    // Оновлення позиції джойстика
     function updateJoystick(input) {
         const clientX = input.clientX || input.pageX;
         const clientY = input.clientY || input.pageY;
@@ -269,7 +249,6 @@
         joyInput.y = moveY / (rect.height/2);
     }
     
-    // Обробники (скорочено для ясності, але включають мишу та тач)
     joystick.addEventListener('mousedown', (e) => { e.preventDefault(); isDragging = true; updateJoystick(e); });
     joystick.addEventListener('touchstart', (e) => { e.preventDefault(); const touch = e.changedTouches[0]; touchId = touch.identifier; isDragging = true; updateJoystick(touch); });
     window.addEventListener('mousemove', (e) => { if (isDragging && touchId === null) updateJoystick(e); });
@@ -277,15 +256,10 @@
     window.addEventListener('mouseup', (e) => { if (isDragging && touchId === null) resetJoystick(); });
     window.addEventListener('touchend', (e) => { for (let i = 0; i < e.changedTouches.length; i++) { if (e.changedTouches[i].identifier === touchId) { resetJoystick(); break; } } });
 
-    // Кнопка ДІЯ (мобільна/ПК)
     document.getElementById('action-btn').addEventListener('touchstart', (e) => { e.preventDefault(); handleAction(); });
     document.getElementById('action-btn').addEventListener('mousedown', (e) => { e.preventDefault(); handleAction(); });
 
-    // Кнопка ВІДМІНА (Вихід з магазину)
-    document.getElementById('shop-exit-btn').addEventListener('touchstart', (e) => { e.preventDefault(); exitShop(); });
-    document.getElementById('shop-exit-btn').addEventListener('mousedown', (e) => { e.preventDefault(); exitShop(); });
-
-    // --- ЛОГІКА ГРИ ---
+    // --- ЛОГІКА СЦЕН ---
     
     function showMessage(text, duration = 1500) {
         const msg = document.getElementById('message');
@@ -295,49 +269,70 @@
     }
 
     function enterShop() {
-        if (player.fish > 0) {
-             document.getElementById('shop-fish-count').innerText = player.fish;
-        } else {
-             document.getElementById('shop-fish-count').innerText = 0;
-        }
-
-        player.isInShop = true;
-        document.getElementById('shop-ui').style.display = 'flex';
-        document.getElementById('mobile-controls').style.display = 'none';
+        currentScene = 'shop';
+        // Телепортуємо гравця до входу в магазин
+        player.x = shopInterior.exitX;
+        player.y = shopInterior.exitY - player.size;
         showMessage("Ласкаво просимо до магазину!", 1500);
     }
 
     function exitShop() {
-        player.isInShop = false;
-        document.getElementById('shop-ui').style.display = 'none';
-        document.getElementById('mobile-controls').style.display = 'flex';
-        showMessage("Ви вийшли з магазину", 1500);
+        currentScene = 'shore';
+        // Телепортуємо гравця до входу на березі
+        player.x = shopEntranceZone.x - player.size / 2;
+        player.y = canvas.height / 2;
+        showMessage("Ви вийшли на берег", 1500);
+    }
+    
+    function sellFish() {
+        if (player.fish > 0) {
+            let earnings = player.fish * 10;
+            player.money += earnings;
+            player.fish = 0;
+            
+            document.getElementById('fish-count').innerText = player.fish;
+            document.getElementById('money-count').innerText = player.money;
+            
+            showMessage(`💰 Продано! +${earnings} монет`, 2000);
+        } else {
+            showMessage("❌ У ящику немає риби для продажу", 2000);
+        }
     }
 
     function handleAction() {
         if (player.isFishing) return; 
 
-        if (player.isInShop) {
-            sellFish();
-            return;
-        }
+        if (currentScene === 'shore') {
+            const fishingSpotX = waterZone.w + player.size / 2; 
+            const distanceToFishingSpot = Math.abs(player.x - fishingSpotX);
 
-        const fishingSpotX = waterZone.w + player.size / 2; 
-        const distanceToFishingSpot = Math.abs(player.x - fishingSpotX);
+            const shopEntranceX = shopEntranceZone.x - player.size / 2;
+            const distanceToShop = Math.abs(player.x - shopEntranceX);
 
-        const shopEntranceX = shopZone.x - player.size / 2;
-        const distanceToShop = Math.abs(player.x - shopEntranceX);
-
-        // 1. Риболовля
-        if (distanceToFishingSpot < FISHING_RANGE) {
-            catchFish();
+            // 1. Риболовля
+            if (distanceToFishingSpot < FISHING_RANGE) {
+                catchFish();
+            } 
+            // 2. Вхід до магазину
+            else if (distanceToShop < INTERACT_RANGE) {
+                enterShop();
+            } 
+            else {
+                showMessage("Підійди до води або магазину!");
+            }
         } 
-        // 2. Вхід до магазину (коли стоїть біля входу)
-        else if (distanceToShop < FISHING_RANGE) {
-            enterShop();
-        } 
-        else {
-            showMessage("Підійди до води або магазину!");
+        else if (currentScene === 'shop') {
+            // Перевіряємо, чи стоїть гравець біля ящика для продажу
+            const distToCrate = Math.sqrt(
+                Math.pow(player.x - sellCrates.x, 2) + 
+                Math.pow(player.y - sellCrates.y, 2)
+            );
+
+            if (distToCrate < INTERACT_RANGE) {
+                sellFish();
+            } else {
+                showMessage("Підійди до ящиків для продажу!");
+            }
         }
     }
 
@@ -353,24 +348,8 @@
         }, 3000); 
     }
 
-    function sellFish() {
-        if (player.fish > 0) {
-            let earnings = player.fish * 10;
-            player.money += earnings;
-            player.fish = 0;
-            
-            document.getElementById('fish-count').innerText = player.fish;
-            document.getElementById('money-count').innerText = player.money;
-            document.getElementById('shop-fish-count').innerText = 0;
-            
-            showMessage(`💰 Продано! +${earnings} монет`, 2500);
-        } else {
-            showMessage("❌ Немає риби для продажу", 2500);
-        }
-    }
-
     function update() {
-        if (player.isFishing || player.isInShop) return; 
+        if (player.isFishing) return; 
 
         let dx = 0;
         let dy = 0;
@@ -385,13 +364,40 @@
         
         let newX = player.x + dx;
         let newY = player.y + dy;
+        
+        // --- ЛОГІКА РУХУ ТА КОЛІЗІЙ ---
 
-        // БЛОКУВАННЯ ВХОДУ У ВОДУ (лівий край)
-        if (newX - player.size / 2 < waterZone.w) {
-            newX = waterZone.w + player.size / 2; 
+        if (currentScene === 'shore') {
+            // БЛОКУВАННЯ ВХОДУ У ВОДУ (лівий край)
+            if (newX - player.size / 2 < waterZone.w) {
+                newX = waterZone.w + player.size / 2; 
+            }
+            // БЛОКУВАННЯ ВХОДУ У МАГАЗИН (правий край)
+            // Дозволяємо підійти до межі, але не перетинати її
+            if (newX + player.size / 2 > shopEntranceZone.x) {
+                 newX = shopEntranceZone.x - player.size / 2;
+            }
+
+        } else if (currentScene === 'shop') {
+             // Вихід з магазину
+            if (newY > shopInterior.exitY) {
+                 exitShop();
+                 return; 
+            }
+
+            // Блокування стін у магазині
+            if (newX < player.size / 2) newX = player.size / 2; // Ліва стіна
+            if (newX > canvas.width - player.size / 2) newX = canvas.width - player.size / 2; // Права стіна
+            if (newY < player.size / 2) newY = player.size / 2; // Верхня стіна
+            
+            // Запобігання руху в зону виходу, якщо гравець йде вгору
+            if (newY > shopInterior.exitY) newY = shopInterior.exitY;
+
+            // Блокування руху навколо ящиків (просто для прикладу)
+            // (Ігноруємо для спрощення, щоб не ускладнювати логіку колізій)
         }
         
-        // Обмеження екрану
+        // Обмеження екрану (загальне)
         if (newX < player.size / 2) newX = player.size / 2; 
         if (newX > canvas.width - player.size / 2) newX = canvas.width - player.size / 2;
         if (newY < player.size / 2) newY = player.size / 2;
@@ -401,37 +407,67 @@
         player.y = newY;
     }
 
+    function drawScene() {
+        if (currentScene === 'shore') {
+            // Малюємо Берег (зелений фон)
+            canvas.style.backgroundColor = '#4CAF50'; 
+            
+            // 1. Малюємо Воду
+            ctx.fillStyle = waterZone.color;
+            ctx.fillRect(waterZone.x, waterZone.y, waterZone.w, waterZone.h);
+            ctx.fillStyle = "white";
+            ctx.font = "20px Arial";
+            ctx.fillText("РІЧКА", 20, canvas.height/2);
+
+            // 2. Малюємо Магазин (вхід)
+            ctx.fillStyle = shopEntranceZone.color;
+            ctx.fillRect(shopEntranceZone.x, shopEntranceZone.y, shopEntranceZone.w, shopEntranceZone.h);
+            ctx.fillStyle = "white";
+            ctx.fillText("МАГАЗИН", shopEntranceZone.x + 20, canvas.height/2);
+
+            // Вхід (Двері)
+            ctx.fillStyle = 'black';
+            ctx.fillRect(shopEntranceZone.x + shopEntranceZone.w / 2 - 20, canvas.height / 2 + 50, 40, 60);
+
+        } else if (currentScene === 'shop') {
+            // Малюємо Інтер'єр Магазину
+            canvas.style.backgroundColor = shopInterior.color; 
+            
+            // 1. Зона Виходу
+            ctx.fillStyle = '#1A1A1A';
+            ctx.fillRect(0, shopInterior.exitY, canvas.width, canvas.height - shopInterior.exitY);
+            ctx.fillStyle = "white";
+            ctx.fillText("ВИХІД", shopInterior.exitX - 30, shopInterior.exitY + 30);
+            
+            // 2. Ящики для продажу
+            ctx.fillStyle = sellCrates.color;
+            ctx.fillRect(sellCrates.x - sellCrates.size / 2, sellCrates.y - sellCrates.size / 2, sellCrates.size, sellCrates.size);
+            ctx.fillStyle = 'yellow';
+            ctx.fillText("ПРОДАТИ", sellCrates.x - 30, sellCrates.y + sellCrates.size / 2 + 20);
+            ctx.fillText(`Риба: ${player.fish}`, sellCrates.x - 30, sellCrates.y + sellCrates.size / 2 + 40);
+        }
+    }
+
     function draw() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // 1. Малюємо Воду та Магазин
-        ctx.fillStyle = waterZone.color;
-        ctx.fillRect(waterZone.x, waterZone.y, waterZone.w, waterZone.h);
-        ctx.fillStyle = "white";
-        ctx.font = "20px Arial";
-        ctx.fillText("ВОДА", 20, canvas.height/2);
+        // Малюємо Сцену (залежно від currentScene)
+        drawScene();
 
-        ctx.fillStyle = shopZone.color;
-        ctx.fillRect(shopZone.x, shopZone.y, shopZone.w, shopZone.h);
-        ctx.fillStyle = "white";
-        ctx.fillText("МАГАЗИН", shopZone.x + 20, canvas.height/2);
-
-        // 2. Малюємо Гравця (зображення)
-        if (!player.isInShop) {
-            if (playerImageLoaded) {
-                ctx.drawImage(playerImage, player.x - player.size / 2, player.y - player.size / 2, player.size, player.size);
-            } else {
-                ctx.beginPath();
-                ctx.arc(player.x, player.y, player.size / 2, 0, Math.PI * 2);
-                ctx.fillStyle = 'gray'; 
-                ctx.fill();
-                ctx.strokeStyle = "black";
-                ctx.stroke();
-            }
+        // 1. Малюємо Гравця
+        if (playerImageLoaded) {
+            ctx.drawImage(playerImage, player.x - player.size / 2, player.y - player.size / 2, player.size, player.size);
+        } else {
+            ctx.beginPath();
+            ctx.arc(player.x, player.y, player.size / 2, 0, Math.PI * 2);
+            ctx.fillStyle = 'gray'; 
+            ctx.fill();
+            ctx.strokeStyle = "black";
+            ctx.stroke();
         }
 
-        // 3. Малюємо вудку
-        if (player.isFishing) {
+        // 2. Малюємо вудку (лише на березі)
+        if (player.isFishing && currentScene === 'shore') {
             ctx.beginPath();
             ctx.moveTo(player.x, player.y - player.size / 4); 
             ctx.lineTo(waterZone.w / 2, canvas.height / 2); 
@@ -449,22 +485,33 @@
             ctx.stroke();
         }
 
-        // 4. Підказки
+        // 3. Підказки
         ctx.fillStyle = "black";
         ctx.font = "14px Arial";
 
-        const fishingSpotX = waterZone.w + player.size / 2;
-        const distanceToFishingSpot = Math.abs(player.x - fishingSpotX);
+        if (!player.isFishing) { 
+            if (currentScene === 'shore') {
+                const fishingSpotX = waterZone.w + player.size / 2; 
+                const distanceToFishingSpot = Math.abs(player.x - fishingSpotX);
+                const shopEntranceX = shopEntranceZone.x - player.size / 2;
+                const distanceToShop = Math.abs(player.x - shopEntranceX);
 
-        const shopEntranceX = shopZone.x - player.size / 2;
-        const distanceToShop = Math.abs(player.x - shopEntranceX);
-
-        if (!player.isFishing && !player.isInShop) { 
-            if (distanceToFishingSpot < FISHING_RANGE * 2) {
-                ctx.fillText("Тисни ДІЮ (Ловити)", player.x + player.size / 2 + 5, player.y);
-            } 
-            else if (distanceToShop < FISHING_RANGE * 2) {
-                ctx.fillText("Тисни ДІЮ (Вхід)", player.x - player.size / 2 - 80, player.y);
+                if (distanceToFishingSpot < INTERACT_RANGE * 1.5) {
+                    ctx.fillText("Тисни ДІЮ (Ловити)", player.x + player.size / 2 + 5, player.y);
+                } 
+                else if (distanceToShop < INTERACT_RANGE * 1.5) {
+                    ctx.fillText("Тисни ДІЮ (Зайти)", player.x - player.size / 2 - 80, player.y);
+                }
+            } else if (currentScene === 'shop') {
+                const distToCrate = Math.sqrt(
+                    Math.pow(player.x - sellCrates.x, 2) + 
+                    Math.pow(player.y - sellCrates.y, 2)
+                );
+                 if (distToCrate < INTERACT_RANGE * 1.5) {
+                    ctx.fillText("Тисни ДІЮ (Продати)", player.x + player.size / 2 + 5, player.y);
+                } else if (player.y > shopInterior.exitY - player.size) {
+                     ctx.fillText("Йди вниз для Виходу", player.x - 70, player.y - 40);
+                }
             }
         }
     }
@@ -488,11 +535,10 @@
     });
     
     // Ініціалізація та запуск
-    updateZoneDimensions(); // Перший розрахунок розмірів при старті
+    updateZoneDimensions(); 
     if (playerImageLoaded) { 
         gameLoop();
     }
-    // Інакше гра запуститься після завантаження зображення
 </script>
 </body>
 </html>

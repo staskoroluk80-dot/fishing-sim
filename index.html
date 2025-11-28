@@ -84,7 +84,7 @@
         }
 
         .action-btn:active {
-            background: rgba(255, 0, 0, 0.8);
+            background: rgba(255, 255, 255, 0.3);
         }
 
         /* Підказки */
@@ -138,12 +138,15 @@
         speed: 4,
         fish: 0,
         money: 0,
-        isFishing: false // Новий стан: чи ловить гравець рибу
+        isFishing: false 
     };
 
     // Зони (Вода та Магазин)
     const waterZone = { x: 0, y: 0, w: 200, h: canvas.height, color: '#2196F3' }; // Ліворуч
     const shopZone = { x: canvas.width - 200, y: 0, w: 200, h: canvas.height, color: '#795548' }; // Праворуч
+    
+    // Нова константа: радіус, у якому можна ловити рибу від краю води
+    const FISHING_RANGE = player.size * 1.5; 
 
     // --- КЕРУВАННЯ ---
     const keys = { w: false, a: false, s: false, d: false };
@@ -168,7 +171,7 @@
     const joystick = document.getElementById('joystick');
     const stick = document.getElementById('stick');
     let touchId = null;
-    let joyInput = { x: 0, y: 0 }; // Вектор руху (-1 до 1)
+    let joyInput = { x: 0, y: 0 }; 
 
     // Приховуємо мобільні елементи, якщо це ПК
     if (!('ontouchstart' in window || navigator.maxTouchPoints > 0 || navigator.msMaxTouchPoints > 0)) {
@@ -240,13 +243,18 @@
     }
 
     function handleAction() {
-        if (player.isFishing) return; // Не можна робити дію, якщо вже ловиш рибу
+        if (player.isFishing) return; 
 
-        // Перевірка: чи ми у воді?
-        if (player.x < waterZone.w) {
+        // Координата X, де має стояти центр гравця, щоб торкатися води
+        const fishingSpotX = waterZone.w + player.size;
+        // Відстань від центру гравця до ідеальної точки для риболовлі
+        const distanceToFishingSpot = Math.abs(player.x - fishingSpotX);
+
+        // 1. Риболовля (якщо стоїть близько до берега)
+        if (distanceToFishingSpot < FISHING_RANGE) {
             catchFish();
         } 
-        // Перевірка: чи ми в магазині?
+        // 2. Продаж (якщо у зоні магазину)
         else if (player.x > shopZone.x) {
             sellFish();
         } else {
@@ -255,17 +263,17 @@
     }
 
     function catchFish() {
-        player.isFishing = true; // Позначаємо, що гравець ловить
-        player.color = 'green'; // Змінюємо колір гравця
+        player.isFishing = true; 
+        player.color = 'green'; 
         showMessage("🎣 Вудка закинута...");
 
         setTimeout(() => {
             player.fish++;
             document.getElementById('fish-count').innerText = player.fish;
             showMessage("✅ Спіймав рибу!");
-            player.isFishing = false; // Завершили ловлю
-            player.color = 'white'; // Повертаємо колір гравця
-        }, 3000); // Час ловлі (3 секунди)
+            player.isFishing = false; 
+            player.color = 'white'; 
+        }, 3000); 
     }
 
     function sellFish() {
@@ -284,23 +292,38 @@
     }
 
     function update() {
-        if (player.isFishing) return; // Не рухаємо гравця, якщо він ловить рибу
+        if (player.isFishing) return; // Не рухаємо, якщо ловить
 
-        // Рух ПК
-        if (keys.w) player.y -= player.speed;
-        if (keys.s) player.y += player.speed;
-        if (keys.a) player.x -= player.speed;
-        if (keys.d) player.x += player.speed;
+        let dx = 0;
+        let dy = 0;
 
-        // Рух Джойстик
-        player.x += joyInput.x * player.speed;
-        player.y += joyInput.y * player.speed;
+        // Розрахунок руху з клавіш/джойстика
+        if (keys.w) dy -= player.speed;
+        if (keys.s) dy += player.speed;
+        if (keys.a) dx -= player.speed;
+        if (keys.d) dx += player.speed;
+        
+        dx += joyInput.x * player.speed;
+        dy += joyInput.y * player.speed;
+        
+        let newX = player.x + dx;
+        let newY = player.y + dy;
 
+        // --- БЛОКУВАННЯ ВХОДУ У ВОДУ ---
+        // Якщо лівий край гравця (newX - player.size) менший за край води (waterZone.w)
+        if (newX - player.size < waterZone.w) {
+            newX = waterZone.w + player.size; // Зупиняємо гравця на кордоні
+        }
+        // -------------------------------
+        
         // Обмеження екрану
-        if (player.x < player.size) player.x = player.size;
-        if (player.x > canvas.width - player.size) player.x = canvas.width - player.size;
-        if (player.y < player.size) player.y = player.size;
-        if (player.y > canvas.height - player.size) player.y = canvas.height - player.size;
+        if (newX < player.size) newX = player.size; 
+        if (newX > canvas.width - player.size) newX = canvas.width - player.size;
+        if (newY < player.size) newY = player.size;
+        if (newY > canvas.height - player.size) newY = canvas.height - player.size;
+
+        player.x = newX;
+        player.y = newY;
     }
 
     function draw() {
@@ -349,10 +372,17 @@
         // 5. Підказка
         ctx.fillStyle = "black";
         ctx.font = "14px Arial";
-        if (!player.isFishing) { // Показуємо підказки тільки коли не ловимо
-            if (player.x < waterZone.w) {
+
+        const fishingSpotX = waterZone.w + player.size;
+        const distanceToFishingSpot = Math.abs(player.x - fishingSpotX);
+
+        if (!player.isFishing) { 
+            // Підказка про риболовлю, якщо гравець близько
+            if (distanceToFishingSpot < FISHING_RANGE * 2) {
                 ctx.fillText("Тисни ДІЮ щоб ловити", player.x + 25, player.y);
-            } else if (player.x > shopZone.x) {
+            } 
+            // Підказка про продаж
+            else if (player.x > shopZone.x) {
                 ctx.fillText("Тисни ДІЮ щоб продати", player.x - 180, player.y);
             }
         }

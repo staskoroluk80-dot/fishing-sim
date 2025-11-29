@@ -3,68 +3,70 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>2D Рибалка Симулятор (Виправлено баги)</title>
+    <title>2D Рибалка: Виправлена версія</title>
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap" rel="stylesheet">
     <style>
         body {
             margin: 0;
             overflow: hidden; 
             background-color: #333;
-            font-family: 'Montserrat', Arial, sans-serif;
+            font-family: 'Montserrat', sans-serif;
             touch-action: none; 
+            user-select: none;
         }
 
         canvas {
             display: block;
-            background-color: #4CAF50; 
         }
 
-        /* --- UI Шари --- */
+        /* Інтерфейс */
         #ui-layer {
             position: absolute;
             top: 10px;
             left: 10px;
             color: white;
-            font-size: 20px;
+            font-size: 18px;
             font-weight: bold;
-            text-shadow: 1px 1px 2px black;
+            text-shadow: 2px 2px 4px black;
             pointer-events: none;
             z-index: 10;
         }
 
+        /* Повідомлення по центру */
         #message {
             position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            color: yellow;
-            font-size: 24px;
+            color: #FFD700;
+            font-size: 26px;
             font-weight: bold;
             text-shadow: 2px 2px 4px black;
+            text-align: center;
             display: none;
             pointer-events: none;
-            z-index: 10;
+            z-index: 20;
         }
 
-        /* --- Керування --- */
+        /* Керування */
         #mobile-controls {
             position: absolute;
-            bottom: 20px;
+            bottom: 30px;
             width: 100%;
-            height: 150px;
+            height: 120px;
             display: flex;
             justify-content: space-between;
-            padding: 0 20px;
+            padding: 0 40px;
             box-sizing: border-box;
-            pointer-events: none;
-            z-index: 10;
+            pointer-events: none; /* Пропускає кліки крізь пусті місця */
+            z-index: 15;
         }
 
         .joystick-area {
             width: 120px;
             height: 120px;
-            background: rgba(255, 255, 255, 0.1);
-            border: 2px solid rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.15);
+            border: 2px solid rgba(255, 255, 255, 0.4);
             border-radius: 50%;
             position: relative;
             pointer-events: auto; 
@@ -73,7 +75,7 @@
         .joystick-stick {
             width: 50px;
             height: 50px;
-            background: rgba(255, 255, 255, 0.5);
+            background: rgba(255, 255, 255, 0.7);
             border-radius: 50%;
             position: absolute;
             top: 50%;
@@ -84,21 +86,22 @@
         .action-btn {
             width: 100px;
             height: 100px;
-            background: rgba(255, 0, 0, 0.5);
+            background: rgba(255, 69, 0, 0.6);
             border-radius: 50%;
-            border: 2px solid white;
+            border: 3px solid white;
             color: white;
-            font-size: 18px;
+            font-size: 20px;
+            font-weight: bold;
             display: flex;
             align-items: center;
             justify-content: center;
             pointer-events: auto; 
-            user-select: none;
-            font-family: 'Montserrat', Arial, sans-serif;
+            font-family: 'Montserrat', sans-serif;
         }
 
         .action-btn:active {
-            background: rgba(255, 255, 255, 0.3);
+            background: rgba(255, 69, 0, 0.9);
+            transform: scale(0.95);
         }
     </style>
 </head>
@@ -107,7 +110,7 @@
     <div id="ui-layer">
         <div>🐟 Риба: <span id="fish-count">0</span></div>
         <div>💰 Гроші: <span id="money-count">0</span></div>
-        <div style="margin-top: 10px;">⏰ Час: <span id="time-display">06:00</span></div>
+        <div style="margin-top: 5px;">⏰ Час: <span id="time-display">06:00</span></div>
     </div>
 
     <div id="message"></div>
@@ -122,652 +125,434 @@
     <canvas id="gameCanvas"></canvas>
 
 <script>
-    // --- НАЛАШТУВАННЯ ГРИ ---
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
-    
-    // Ініціалізація розмірів
+
+    // --- КОНФІГУРАЦІЯ ГРИ ---
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
-    let currentScene = 'shore'; 
+    let currentScene = 'shore'; // 'shore', 'shop', 'home'
 
-    // --- ОБ'ЄКТ ЧАСУ ---
+    // Час
     const time = {
-        gameHour: 6, // Починаємо о 6:00
+        gameHour: 6,
         gameMinute: 0,
-        timeScale: 0.1, // Чим менше, тим повільніше йде час (0.1 = 1 година ~ 6 секунд реального часу)
-        lastTime: 0,
+        timeScale: 0.05, // ЗНАЧНО ПОВІЛЬНІШЕ (було 0.1)
+        lastTime: 0
     };
-    
+
+    // Гравець
     const player = {
         x: canvas.width / 2,
         y: canvas.height / 2,
-        size: 60, 
-        speed: 4,
+        size: 60,
+        speed: 5,
         fish: 0,
         money: 0,
         isFishing: false,
-        rodLevel: 1 
+        rodLevel: 1
     };
 
-    // Об'єкти апгрейдів
+    // Апгрейди
     const upgrades = {
-        rod: {
-            level: 2, cost: 50, timeReduction: 1000, description: "Краща вудка: -1 сек. на риболовлю."
-        }
+        rod: { level: 2, cost: 50, timeReduction: 1500, description: "Спінінг PRO" }
     };
 
-    // Розміри зон
-    const ZONE_WIDTH_PERCENT = 0.20; 
-    let zoneWidth = canvas.width * ZONE_WIDTH_PERCENT;
+    // --- ЗОНИ (Оголошуємо змінні, ініціалізуємо в updateZoneDimensions) ---
+    let waterZone = {};
+    let shopEntrance = {};
+    let homeEntrance = {};
 
-    // Зони Берега
-    const waterZone = { x: 0, y: 0, w: zoneWidth, h: canvas.height, color: '#2196F3' }; 
-    const shopEntranceZone = { x: canvas.width - zoneWidth, y: 0, w: zoneWidth, h: canvas.height, color: '#795548' }; 
-    const homeEntranceZone = { x: 250, y: 100, w: 200, h: 200, color: '#5C3317' }; // Перемістив будинок, щоб не заважав магазину
+    let shopInterior = {};
+    let shopCrates = {};
+    let shopUpgrade = {};
 
-    // Зони Магазину
-    const shopInterior = { 
-        color: '#3A3A3A', 
-        exitY: canvas.height - 50, 
-    };
+    let homeInterior = {};
+    let homeBed = {};
 
-    const sellCrates = {
-        x: canvas.width / 2 - 100, 
-        y: canvas.height / 3, 
-        size: 80,
-        color: '#B5651D' 
-    };
-
-    const upgradeStand = {
-        x: canvas.width / 2 + 100, 
-        y: canvas.height / 3, 
-        size: 80,
-        color: '#444444' 
-    };
-
-    // Зони Будинку
-    const homeInterior = {
-        color: '#8B4513', 
-        exitY: canvas.height - 50,
-        bed: { x: 100, y: 100, w: 100, h: 50, color: '#800000' } // Ліжко
-    }
-
-
-    const FISHING_RANGE = player.size * 0.75; 
-    const INTERACT_RANGE = player.size * 1.5; 
-
-    // Завантаження зображення персонажа 
+    // Завантаження спрайта
     const playerImage = new Image();
-    playerImage.src = 'Buzz_fisherman.png'; 
-    let playerImageLoaded = false;
-    let gameReady = false;
+    playerImage.src = 'Buzz_fisherman.png';
+    let isImageLoaded = false;
 
-    playerImage.onload = () => {
-        playerImageLoaded = true;
-        gameReady = true;
-        gameLoop(0); 
-    };
+    playerImage.onload = () => { isImageLoaded = true; startGame(); };
+    playerImage.onerror = () => { console.log("Спрайт не знайдено, використовуємо круг."); startGame(); };
 
-    playerImage.onerror = () => {
-        console.error("Помилка завантаження зображення 'Buzz_fisherman.png'.");
-        playerImageLoaded = false; 
-        gameReady = true;
-        gameLoop(0); 
-    };
-    
-    // Функція для оновлення розмірів зон при ресайзі
+    // --- ФУНКЦІЯ РОЗРАХУНКУ ЗОН (Щоб не злипалися) ---
     function updateZoneDimensions() {
-        zoneWidth = canvas.width * ZONE_WIDTH_PERCENT;
-        waterZone.w = zoneWidth;
-        shopEntranceZone.x = canvas.width - zoneWidth;
-        shopEntranceZone.w = zoneWidth;
-        waterZone.h = canvas.height;
-        shopEntranceZone.h = canvas.height;
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
 
-        // Позиції у сценах
-        shopInterior.exitY = canvas.height - 50;
-        sellCrates.x = canvas.width / 2 - 100;
-        sellCrates.y = canvas.height / 3;
-        upgradeStand.x = canvas.width / 2 + 100;
-        upgradeStand.y = canvas.height / 3;
-        homeInterior.exitY = canvas.height - 50;
+        // 1. БЕРЕГ (Shore)
+        const sideWidth = canvas.width * 0.15; // 15% з боків
+        
+        waterZone = { x: 0, y: 0, w: sideWidth, h: canvas.height, color: '#29B6F6' };
+        
+        shopEntrance = { x: canvas.width - sideWidth, y: 0, w: sideWidth, h: canvas.height, color: '#5D4037' };
+        
+        // Дім строго по центру
+        const homeW = 180;
+        const homeH = 150;
+        homeEntrance = { 
+            x: (canvas.width / 2) - (homeW / 2), 
+            y: 50, // Відступ зверху
+            w: homeW, 
+            h: homeH, 
+            color: '#8D6E63' 
+        };
+
+        // 2. ІНТЕР'ЄР МАГАЗИНУ (Shop)
+        shopInterior = { color: '#3E2723', exitY: canvas.height - 80 };
+        shopCrates = { x: canvas.width * 0.3, y: canvas.height * 0.4, size: 80, color: '#FFB74D' }; // Зліва
+        shopUpgrade = { x: canvas.width * 0.7, y: canvas.height * 0.4, size: 80, color: '#00BCD4' }; // Справа
+
+        // 3. ІНТЕР'ЄР ДОМУ (Home)
+        homeInterior = { color: '#5D4037', exitY: canvas.height - 80 };
+        homeBed = { x: canvas.width / 2 - 60, y: 100, w: 120, h: 80, color: '#EF5350' }; // Ліжко по центру зверху
     }
 
-    // --- ЛОГІКА ЧАСУ (ВИПРАВЛЕНО) ---
+    // --- СИСТЕМА ЧАСУ ---
+    function updateTime(dt) {
+        // dt - це секунди реального часу
+        // 60 - це множник для хвилин
+        time.gameMinute += dt * 60 * time.timeScale;
 
-    function updateTime(deltaTimeSeconds) {
-        // ВИПРАВЛЕННЯ: deltaTimeSeconds тепер коректно використовується
-        time.gameMinute += deltaTimeSeconds * 60 * time.timeScale;
-
-        // Якщо хвилина перевищує 60
-        while (time.gameMinute >= 60) {
-            time.gameMinute -= 60;
+        if (time.gameMinute >= 60) {
+            time.gameMinute = 0;
             time.gameHour++;
         }
-
-        // Якщо година перевищує 23 (перехід до нового дня)
-        while (time.gameHour >= 24) {
-            time.gameHour -= 24;
+        if (time.gameHour >= 24) {
+            time.gameHour = 0;
         }
 
-        // Оновлення UI
-        const hourDisplay = String(time.gameHour).padStart(2, '0');
-        const minuteDisplay = String(Math.floor(time.gameMinute)).padStart(2, '0');
-        document.getElementById('time-display').innerText = `${hourDisplay}:${minuteDisplay}`;
+        const h = String(time.gameHour).padStart(2, '0');
+        const m = String(Math.floor(time.gameMinute)).padStart(2, '0');
+        document.getElementById('time-display').innerText = `${h}:${m}`;
     }
 
-    function getOverlayColor() {
-        const hour = time.gameHour + time.gameMinute / 60;
-        let opacity = 0;
+    function getDayNightColor() {
+        const h = time.gameHour + time.gameMinute/60;
+        let alpha = 0;
 
-        // Логіка дня/ночі (без змін)
-        if (hour >= 20 && hour <= 24) { 
-            opacity = (hour - 20) / 4 * 0.6; 
-        } else if (hour >= 0 && hour <= 4) { 
-            opacity = 0.6; 
-        } else if (hour > 4 && hour < 6) { 
-            opacity = 0.6 - (hour - 4) / 2 * 0.6; 
-        } else {
-            opacity = 0; 
-        }
-        return `rgba(0, 0, 0, ${Math.min(opacity, 0.6).toFixed(3)})`;
+        // Ніч: 22:00 - 05:00 (Темно 0.7)
+        // Ранок: 05:00 - 08:00 (Світлішає)
+        // День: 08:00 - 19:00 (0.0)
+        // Вечір: 19:00 - 22:00 (Темніє)
+
+        if (h >= 22 || h < 5) alpha = 0.75;
+        else if (h >= 5 && h < 8) alpha = 0.75 - ((h - 5) / 3) * 0.75;
+        else if (h >= 8 && h < 19) alpha = 0;
+        else if (h >= 19 && h < 22) alpha = ((h - 19) / 3) * 0.75;
+
+        return `rgba(0, 0, 9, ${alpha.toFixed(2)})`; // Синій відтінок ночі
     }
 
-    // --- КЕРУВАННЯ ТА ДЖОЙСТИК (Без змін) ---
+    // --- КЕРУВАННЯ ---
     const keys = { w: false, a: false, s: false, d: false };
-    
-    window.addEventListener('keydown', (e) => {
-        if(e.key === 'w' || e.key === 'W') keys.w = true;
-        if(e.key === 'a' || e.key === 'A') keys.a = true;
-        if(e.key === 's' || e.key === 'S') keys.s = true;
-        if(e.key === 'd' || e.key === 'D') keys.d = true;
-        if(e.key === ' ') handleAction(); 
-    });
+    const joyInput = { x: 0, y: 0 };
 
-    window.addEventListener('keyup', (e) => {
-        if(e.key === 'w' || e.key === 'W') keys.w = false;
-        if(e.key === 'a' || e.key === 'A') keys.a = false;
-        if(e.key === 's' || e.key === 'S') keys.s = false;
-        if(e.key === 'd' || e.key === 'D') keys.d = false;
-    });
+    window.addEventListener('keydown', e => { if("wasd ".includes(e.key.toLowerCase())) keys[e.key.toLowerCase()] = true; if(e.key === ' ') interact(); });
+    window.addEventListener('keyup', e => { if("wasd ".includes(e.key.toLowerCase())) keys[e.key.toLowerCase()] = false; });
 
+    // Джойстик Logic
     const joystick = document.getElementById('joystick');
     const stick = document.getElementById('stick');
-    let touchId = null;
-    let joyInput = { x: 0, y: 0 }; 
-    let isDragging = false;
+    let touchId = null; 
 
-    function resetJoystick() {
-        stick.style.transform = `translate(-50%, -50%)`;
-        joyInput = { x: 0, y: 0 };
-        isDragging = false;
-        touchId = null;
-    }
-
-    function updateJoystick(input) {
-        const clientX = input.clientX || input.pageX;
-        const clientY = input.clientY || input.pageY;
+    const handleJoy = (x, y) => {
         const rect = joystick.getBoundingClientRect();
-        const centerX = rect.left + rect.width / 2;
-        const centerY = rect.top + rect.height / 2;
-        let dx = clientX - centerX;
-        let dy = clientY - centerY;
-        const distance = Math.min(Math.sqrt(dx*dx + dy*dy), rect.width/2);
+        const cx = rect.left + rect.width/2;
+        const cy = rect.top + rect.height/2;
+        let dx = x - cx;
+        let dy = y - cy;
+        const dist = Math.min(Math.sqrt(dx*dx+dy*dy), rect.width/2);
         const angle = Math.atan2(dy, dx);
-        const moveX = Math.cos(angle) * distance;
-        const moveY = Math.sin(angle) * distance;
-        stick.style.transform = `translate(calc(-50% + ${moveX}px), calc(-50% + ${moveY}px))`;
-        joyInput.x = moveX / (rect.width/2);
-        joyInput.y = moveY / (rect.height/2);
-    }
-    
-    joystick.addEventListener('mousedown', (e) => { e.preventDefault(); isDragging = true; updateJoystick(e); });
-    joystick.addEventListener('touchstart', (e) => { e.preventDefault(); const touch = e.changedTouches[0]; touchId = touch.identifier; isDragging = true; updateJoystick(touch); });
-    window.addEventListener('mousemove', (e) => { if (isDragging && touchId === null) updateJoystick(e); });
-    window.addEventListener('touchmove', (e) => { for (let i = 0; i < e.changedTouches.length; i++) { if (e.changedTouches[i].identifier === touchId) { updateJoystick(e.changedTouches[i]); break; } } });
-    window.addEventListener('mouseup', (e) => { if (isDragging && touchId === null) resetJoystick(); });
-    window.addEventListener('touchend', (e) => { for (let i = 0; i < e.changedTouches.length; i++) { if (e.changedTouches[i].identifier === touchId) { resetJoystick(); break; } } });
-
-    document.getElementById('action-btn').addEventListener('touchstart', (e) => { e.preventDefault(); handleAction(); });
-    document.getElementById('action-btn').addEventListener('mousedown', (e) => { e.preventDefault(); handleAction(); });
-
-    // --- ЛОГІКА СЦЕН ---
-    
-    function showMessage(text, duration = 1500) {
-        const msg = document.getElementById('message');
-        msg.innerText = text;
-        msg.style.display = 'block';
-        setTimeout(() => msg.style.display = 'none', duration);
-    }
-
-    function enterShop() {
-        currentScene = 'shop';
-        player.x = canvas.width / 2; 
-        player.y = shopInterior.exitY - player.size;
-        showMessage("Ласкаво просимо до магазину!", 1500);
-    }
-
-    function exitShop() {
-        currentScene = 'shore';
-        player.x = shopEntranceZone.x - player.size / 2;
-        player.y = canvas.height / 2;
-        showMessage("Ви вийшли на берег", 1500);
-    }
-    
-    function enterHome() {
-        currentScene = 'home';
-        player.x = canvas.width / 2; 
-        player.y = homeInterior.exitY - player.size;
-        showMessage("Ви у своєму затишному домі", 1500);
-    }
-
-    function exitHome() {
-        currentScene = 'shore';
-        // ВИПРАВЛЕННЯ: Телепортуємо гравця до дверей будинку
-        player.x = homeEntranceZone.x + homeEntranceZone.w / 2; 
-        player.y = homeEntranceZone.y + homeEntranceZone.h + player.size / 2;
-        showMessage("Ви повернулися на берег", 1500);
-    }
-
-    function sleepNight() {
-        if (time.gameHour < 20 && time.gameHour > 6) {
-             showMessage("❌ Ще не час спати. Потрібно дочекатися ночі (після 20:00).", 3000);
-             return;
-        }
-
-        showMessage("😴 Ви спите...", 3000);
-
-        // Перемотування часу до 6:00 наступного дня
-        setTimeout(() => {
-            time.gameHour = 6;
-            time.gameMinute = 0;
-            showMessage("☀️ Доброго ранку! Ви прокинулися.", 3000);
-        }, 1000); 
-    }
-
-    function sellFish() {
-        if (player.fish > 0) {
-            let earnings = player.fish * 10;
-            player.money += earnings;
-            player.fish = 0;
-            
-            document.getElementById('fish-count').innerText = player.fish;
-            document.getElementById('money-count').innerText = player.money;
-            
-            showMessage(`💰 Продано! +${earnings} монет`, 2000);
-        } else {
-            showMessage("❌ У ящику немає риби для продажу", 2000);
-        }
-    }
-
-    function buyUpgrade() {
-        const upgrade = upgrades.rod;
-
-        if (player.rodLevel >= upgrade.level) {
-            showMessage("У вас вже найкраща вудка!", 2000);
-            return;
-        }
         
-        if (player.money >= upgrade.cost) {
-            player.money -= upgrade.cost;
-            player.rodLevel = upgrade.level;
-            document.getElementById('money-count').innerText = player.money;
-            showMessage(`✅ Куплено: ${upgrade.description}`, 3000);
-        } else {
-            showMessage(`❌ Недостатньо грошей! Потрібно ${upgrade.cost} монет.`, 2000);
-        }
+        const sx = Math.cos(angle) * dist;
+        const sy = Math.sin(angle) * dist;
+        
+        stick.style.transform = `translate(calc(-50% + ${sx}px), calc(-50% + ${sy}px))`;
+        joyInput.x = sx / (rect.width/2);
+        joyInput.y = sy / (rect.height/2);
+    };
+
+    joystick.addEventListener('touchstart', e => { e.preventDefault(); touchId = e.changedTouches[0].identifier; handleJoy(e.changedTouches[0].clientX, e.changedTouches[0].clientY); });
+    joystick.addEventListener('touchmove', e => { e.preventDefault(); for(let t of e.changedTouches) if(t.identifier === touchId) handleJoy(t.clientX, t.clientY); });
+    const endJoy = () => { touchId = null; joyInput.x=0; joyInput.y=0; stick.style.transform = `translate(-50%, -50%)`; };
+    joystick.addEventListener('touchend', endJoy);
+    
+    // Кнопка Дії
+    const btn = document.getElementById('action-btn');
+    btn.addEventListener('touchstart', e => { e.preventDefault(); interact(); btn.style.transform="scale(0.9)"; });
+    btn.addEventListener('touchend', e => { btn.style.transform="scale(1)"; });
+    btn.addEventListener('mousedown', () => interact()); // Для ПК тестів мишкою
+
+    // --- ЛОГІКА ---
+    function showMsg(txt) {
+        const el = document.getElementById('message');
+        el.innerText = txt;
+        el.style.display = 'block';
+        setTimeout(() => el.style.display = 'none', 2000);
     }
 
+    function interact() {
+        if (player.isFishing) return;
 
-    function handleAction() {
-        if (player.isFishing) return; 
+        // Відстань до об'єктів
+        const dist = (x1, y1) => Math.hypot(player.x - x1, player.y - y1);
+        const RANGE = 100;
 
         if (currentScene === 'shore') {
-            const fishingSpotX = waterZone.w + player.size / 2; 
-            const distanceToFishingSpot = Math.abs(player.x - fishingSpotX);
-
-            const shopEntranceX = shopEntranceZone.x - player.size / 2;
-            const distanceToShop = Math.abs(player.x - shopEntranceX);
-            
-            const homeEntranceX = homeEntranceZone.x + homeEntranceZone.w / 2;
-            const distanceToHome = Math.sqrt(
-                Math.pow(player.x - homeEntranceX, 2) + 
-                Math.pow(player.y - (homeEntranceZone.y + homeEntranceZone.h), 2)
-            );
-
             // 1. Риболовля
-            if (distanceToFishingSpot < FISHING_RANGE) {
-                catchFish();
-            } 
-            // 2. Вхід до магазину
-            else if (distanceToShop < INTERACT_RANGE) {
-                enterShop();
-            } 
-            // 3. Вхід до будинку
-            else if (distanceToHome < INTERACT_RANGE * 1.5) {
-                enterHome();
+            if (player.x < waterZone.w + 50) {
+                startFishing();
+                return;
             }
-            else {
-                showMessage("Підійди до води, магазину або дому!");
+            // 2. Магазин
+            if (player.x > shopEntrance.x - 50) {
+                currentScene = 'shop';
+                player.x = canvas.width / 2;
+                player.y = canvas.height - 120;
+                showMsg("🏪 Магазин");
+                return;
             }
-        } 
+            // 3. Дім (Центр)
+            const dHome = dist(homeEntrance.x + homeEntrance.w/2, homeEntrance.y + homeEntrance.h);
+            if (dHome < RANGE) {
+                currentScene = 'home';
+                player.x = canvas.width / 2;
+                player.y = canvas.height - 120;
+                showMsg("🏠 Дім");
+                return;
+            }
+        }
         else if (currentScene === 'shop') {
-            const distToCrate = Math.sqrt(
-                Math.pow(player.x - sellCrates.x, 2) + 
-                Math.pow(player.y - sellCrates.y, 2)
-            );
-
-            const distToStand = Math.sqrt(
-                Math.pow(player.x - upgradeStand.x, 2) + 
-                Math.pow(player.y - upgradeStand.y, 2)
-            );
-
-            if (distToCrate < INTERACT_RANGE) {
-                sellFish();
-            } else if (distToStand < INTERACT_RANGE) {
-                buyUpgrade();
+            // Продаж
+            if (dist(shopCrates.x, shopCrates.y) < RANGE) {
+                if (player.fish > 0) {
+                    const gain = player.fish * 10;
+                    player.money += gain;
+                    player.fish = 0;
+                    showMsg(`💰 Продано: +${gain}`);
+                } else showMsg("❌ Пусто");
+                return;
             }
-             else {
-                showMessage("Підійди до ящиків (Продати) або стійки (Купити)!");
+            // Апгрейд
+            if (dist(shopUpgrade.x, shopUpgrade.y) < RANGE) {
+                if(player.rodLevel < upgrades.rod.level && player.money >= upgrades.rod.cost) {
+                    player.money -= upgrades.rod.cost;
+                    player.rodLevel = upgrades.rod.level;
+                    showMsg("✨ Вудка PRO!");
+                } else if(player.rodLevel >= upgrades.rod.level) showMsg("🔝 Максимум");
+                else showMsg("❌ Мало грошей");
+                return;
             }
         }
         else if (currentScene === 'home') {
-            const distToBed = Math.sqrt(
-                Math.pow(player.x - homeInterior.bed.x, 2) + 
-                Math.pow(player.y - homeInterior.bed.y, 2)
-            );
-
-            if (distToBed < INTERACT_RANGE * 2) {
-                sleepNight();
-            } else {
-                showMessage("Підійди до ліжка, щоб переспати ніч.");
+            // Сон
+            if (dist(homeBed.x + homeBed.w/2, homeBed.y) < RANGE) {
+                if (time.gameHour >= 20 || time.gameHour < 6) {
+                    showMsg("💤 Спимо...");
+                    setTimeout(() => {
+                        time.gameHour = 6;
+                        time.gameMinute = 0;
+                        showMsg("☀️ Ранок!");
+                    }, 1000);
+                } else {
+                    showMsg("❌ Ще рано спати");
+                }
             }
         }
     }
 
-    function catchFish() {
-        player.isFishing = true; 
+    function startFishing() {
+        player.isFishing = true;
+        let delay = 3000;
+        if (player.rodLevel > 1) delay = 1500;
         
-        let fishingTime = 4000; 
-        if (player.rodLevel > 1) {
-            fishingTime -= upgrades.rod.timeReduction; 
-        }
-        
-        showMessage("🎣 Вудка закинута...");
-
+        showMsg("🎣 Ловимо...");
         setTimeout(() => {
             player.fish++;
-            document.getElementById('fish-count').innerText = player.fish;
-            showMessage("✅ Спіймав рибу!", 1500);
-            player.isFishing = false; 
-        }, fishingTime); 
+            player.isFishing = false;
+            showMsg("✅ +1 Риба");
+        }, delay);
     }
 
-    function update(deltaTimeSeconds) {
-        // Оновлення часу відбувається незалежно від руху
-        updateTime(deltaTimeSeconds);
+    function update(dt) {
+        updateTime(dt);
+        if (player.isFishing) return;
 
-        if (player.isFishing) return; 
-
-        let dx = 0;
-        let dy = 0;
-
-        if (keys.w) dy -= player.speed;
-        if (keys.s) dy += player.speed;
-        if (keys.a) dx -= player.speed;
-        if (keys.d) dx += player.speed;
+        // Рух
+        let dx = 0, dy = 0;
+        if (keys.w) dy -= 1;
+        if (keys.s) dy += 1;
+        if (keys.a) dx -= 1;
+        if (keys.d) dx += 1;
         
-        dx += joyInput.x * player.speed;
-        dy += joyInput.y * player.speed;
-        
-        let newX = player.x + dx;
-        let newY = player.y + dy;
-        
-        // --- ЛОГІКА РУХУ ТА КОЛІЗІЙ (ВИПРАВЛЕНО) ---
+        dx += joyInput.x;
+        dy += joyInput.y;
 
+        player.x += dx * player.speed;
+        player.y += dy * player.speed;
+
+        // Обмеження екрану
+        player.x = Math.max(player.size/2, Math.min(canvas.width - player.size/2, player.x));
+        player.y = Math.max(player.size/2, Math.min(canvas.height - player.size/2, player.y));
+
+        // Колізії СЦЕН
         if (currentScene === 'shore') {
-            // ... (Колізії берега без змін) ...
-            if (newX - player.size / 2 < waterZone.w) {
-                newX = waterZone.w + player.size / 2; 
+            // Не заходити у воду глибоко
+            if (player.x < waterZone.w) player.x = waterZone.w;
+            // Не заходити в стіну магазину
+            if (player.x > shopEntrance.x) player.x = shopEntrance.x;
+            
+            // Стіни будинку (проста коробка)
+            // Якщо гравець всередині координат будинку - виштовхуємо
+            const hx = homeEntrance.x, hy = homeEntrance.y, hw = homeEntrance.w, hh = homeEntrance.h;
+            // Якщо гравець намагається пройти крізь дім (не двері)
+            // (Спрощена колізія: просто не пускаємо вверх вище порога дому, якщо по X ми біля дому)
+             if (player.x > hx && player.x < hx + hw && player.y < hy + hh) {
+                 player.y = hy + hh;
+             }
+        }
+        else if (currentScene === 'shop' || currentScene === 'home') {
+            const exitY = (currentScene === 'shop' ? shopInterior.exitY : homeInterior.exitY);
+            
+            // Якщо пішли вниз - вихід
+            if (player.y > exitY) {
+                currentScene = 'shore';
+                // Телепорт на відповідну точку
+                if(currentScene === 'shop') player.x = shopEntrance.x - 60; 
+                else player.x = canvas.width/2;
+                
+                player.y = canvas.height/2 + 50; 
+                showMsg("🌳 Берег");
             }
-            if (newX + player.size / 2 > shopEntranceZone.x) {
-                 newX = shopEntranceZone.x - player.size / 2;
-            }
-
-        } else if (currentScene === 'shop') {
-             // Вихід з магазину
-            if (newY > shopInterior.exitY) {
-                 exitShop();
-                 return; 
-            }
-             // Обмеження на рух (щоб не виходив за межі сцени)
-            if (newY > shopInterior.exitY - player.size/2) newY = shopInterior.exitY - player.size/2;
-
-        } else if (currentScene === 'home') {
-             // ВИПРАВЛЕННЯ: Вихід з дому
-            if (newY > homeInterior.exitY - player.size/2) {
-                 // Перевіряємо, чи гравець перетнув межу виходу
-                 if (newY > homeInterior.exitY) {
-                    exitHome();
-                    return;
-                 }
-                 newY = homeInterior.exitY - player.size/2;
-            }
-             // Обмеження на рух (щоб не виходив за межі сцени)
-            if (newY < player.size / 2) newY = player.size / 2; // Верхня стіна
-            // Обмеження на рух (щоб не виходив за межі сцени)
-            if (newX < player.size / 2) newX = player.size / 2; 
-            if (newX > canvas.width - player.size / 2) newX = canvas.width - player.size / 2;
         }
         
-        // Обмеження екрану (загальне)
-        if (newX < player.size / 2) newX = player.size / 2; 
-        if (newX > canvas.width - player.size / 2) newX = canvas.width - player.size / 2;
-        if (newY < player.size / 2) newY = player.size / 2;
-        if (newY > canvas.height - player.size / 2) newY = canvas.height - player.size / 2;
-
-        player.x = newX;
-        player.y = newY;
-    }
-
-    function drawScene() {
-        if (currentScene === 'shore') {
-            // Малюємо Берег
-            canvas.style.backgroundColor = '#4CAF50'; 
-            
-            ctx.fillStyle = waterZone.color;
-            ctx.fillRect(waterZone.x, waterZone.y, waterZone.w, waterZone.h);
-            ctx.fillStyle = "white";
-            ctx.font = "20px 'Montserrat'";
-            ctx.fillText("РІЧКА", 20, canvas.height/2);
-
-            ctx.fillStyle = shopEntranceZone.color;
-            ctx.fillRect(shopEntranceZone.x, shopEntranceZone.y, shopEntranceZone.w, shopEntranceZone.h);
-            ctx.fillStyle = "white";
-            ctx.fillText("МАГАЗИН", shopEntranceZone.x + 20, canvas.height/2);
-            ctx.fillStyle = 'black'; // Двері
-            ctx.fillRect(shopEntranceZone.x + shopEntranceZone.w / 2 - 20, canvas.height / 2 + 50, 40, 60);
-
-            // Будинок
-            ctx.fillStyle = homeEntranceZone.color;
-            ctx.fillRect(homeEntranceZone.x, homeEntranceZone.y, homeEntranceZone.w, homeEntranceZone.h);
-            ctx.fillStyle = "white";
-            ctx.fillText("ДІМ", homeEntranceZone.x + 80, homeEntranceZone.y + 40);
-            ctx.fillStyle = 'black'; // Двері
-            ctx.fillRect(homeEntranceZone.x + homeEntranceZone.w / 2 - 20, homeEntranceZone.y + homeEntranceZone.h - 10, 40, 60);
-
-
-        } else if (currentScene === 'shop') {
-            // Малюємо Інтер'єр Магазину
-            canvas.style.backgroundColor = shopInterior.color; 
-            
-            ctx.fillStyle = '#1A1A1A';
-            ctx.fillRect(0, shopInterior.exitY, canvas.width, canvas.height - shopInterior.exitY);
-            ctx.fillStyle = "white";
-            ctx.fillText("ВИХІД", canvas.width / 2 - 30, shopInterior.exitY + 30);
-            
-            ctx.fillStyle = sellCrates.color;
-            ctx.fillRect(sellCrates.x - sellCrates.size / 2, sellCrates.y - sellCrates.size / 2, sellCrates.size, sellCrates.size);
-            ctx.fillStyle = 'yellow';
-            ctx.fillText("ПРОДАТИ", sellCrates.x - 35, sellCrates.y + sellCrates.size / 2 + 20);
-            ctx.fillText(`Риба: ${player.fish}`, sellCrates.x - 35, sellCrates.y + sellCrates.size / 2 + 40);
-
-            ctx.fillStyle = upgradeStand.color;
-            ctx.fillRect(upgradeStand.x - upgradeStand.size / 2, upgradeStand.y - upgradeStand.size / 2, upgradeStand.size, upgradeStand.size);
-            ctx.fillStyle = '#00bcd4';
-            ctx.fillText("ВУДКА", upgradeStand.x - 30, upgradeStand.y + sellCrates.size / 2 + 20);
-            
-            const upgradeStatus = player.rodLevel === upgrades.rod.level ? 'MAX' : `50$`;
-            ctx.fillText(`Рівень ${player.rodLevel} / 2 (${upgradeStatus})`, upgradeStand.x - 50, upgradeStand.y + sellCrates.size / 2 + 40);
-
-        } else if (currentScene === 'home') {
-            // ВИПРАВЛЕННЯ: Малюємо Інтер'єр Дому
-            canvas.style.backgroundColor = homeInterior.color;
-
-            // Ліжко
-            ctx.fillStyle = homeInterior.bed.color;
-            ctx.fillRect(homeInterior.bed.x, homeInterior.bed.y, homeInterior.bed.w, homeInterior.bed.h);
-            ctx.fillStyle = 'white';
-            ctx.fillText("ЛІЖКО", homeInterior.bed.x + 20, homeInterior.bed.y - 10);
-
-            // Зона Виходу
-            ctx.fillStyle = '#1A1A1A';
-            ctx.fillRect(0, homeInterior.exitY, canvas.width, canvas.height - homeInterior.exitY);
-            ctx.fillStyle = "white";
-            ctx.fillText("ВИХІД", canvas.width / 2 - 30, homeInterior.exitY + 30);
-        }
+        // Оновлення UI
+        document.getElementById('fish-count').innerText = player.fish;
+        document.getElementById('money-count').innerText = player.money;
     }
 
     function draw() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        drawScene();
+        // --- МАЛЮВАННЯ СЦЕНИ ---
+        if (currentScene === 'shore') {
+            // Трава
+            ctx.fillStyle = '#66BB6A';
+            ctx.fillRect(0,0,canvas.width, canvas.height);
 
-        // 1. Малюємо Гравця
-        if (playerImageLoaded) {
-            ctx.drawImage(playerImage, player.x - player.size / 2, player.y - player.size / 2, player.size, player.size);
+            // Вода
+            ctx.fillStyle = waterZone.color;
+            ctx.fillRect(waterZone.x, waterZone.y, waterZone.w, waterZone.h);
+            
+            // Магазин
+            ctx.fillStyle = shopEntrance.color;
+            ctx.fillRect(shopEntrance.x, shopEntrance.y, shopEntrance.w, shopEntrance.h);
+            ctx.fillStyle = 'white'; ctx.fillText('МАГАЗИН', shopEntrance.x + 10, 100);
+
+            // Дім (ЦЕНТР)
+            ctx.fillStyle = homeEntrance.color;
+            ctx.fillRect(homeEntrance.x, homeEntrance.y, homeEntrance.w, homeEntrance.h);
+            // Дах
+            ctx.beginPath();
+            ctx.moveTo(homeEntrance.x - 20, homeEntrance.y);
+            ctx.lineTo(homeEntrance.x + homeEntrance.w/2, homeEntrance.y - 60);
+            ctx.lineTo(homeEntrance.x + homeEntrance.w + 20, homeEntrance.y);
+            ctx.fillStyle = '#5D4037'; ctx.fill();
+            // Двері
+            ctx.fillStyle = '#3E2723';
+            ctx.fillRect(homeEntrance.x + homeEntrance.w/2 - 25, homeEntrance.y + homeEntrance.h - 60, 50, 60);
+            ctx.fillStyle = 'white'; ctx.fillText('ДІМ', homeEntrance.x + homeEntrance.w/2 - 15, homeEntrance.y + 50);
+
+        } 
+        else if (currentScene === 'shop') {
+            ctx.fillStyle = shopInterior.color;
+            ctx.fillRect(0,0,canvas.width, canvas.height);
+            
+            // Вихід
+            ctx.fillStyle = '#rgba(255,255,255,0.1)';
+            ctx.fillRect(0, shopInterior.exitY, canvas.width, 100);
+            ctx.fillStyle = 'white'; ctx.fillText('ВИХІД ВНИЗ', canvas.width/2 - 40, canvas.height - 30);
+
+            // Об'єкти
+            ctx.fillStyle = shopCrates.color;
+            ctx.fillRect(shopCrates.x - 40, shopCrates.y - 40, 80, 80);
+            ctx.fillStyle = 'white'; ctx.fillText('ПРОДАТИ', shopCrates.x - 30, shopCrates.y);
+
+            ctx.fillStyle = shopUpgrade.color;
+            ctx.fillRect(shopUpgrade.x - 40, shopUpgrade.y - 40, 80, 80);
+            ctx.fillStyle = 'white'; ctx.fillText('ВУДКА', shopUpgrade.x - 20, shopUpgrade.y);
+        } 
+        else if (currentScene === 'home') {
+            ctx.fillStyle = homeInterior.color;
+            ctx.fillRect(0,0,canvas.width, canvas.height);
+
+            // Ліжко
+            ctx.fillStyle = homeBed.color;
+            ctx.fillRect(homeBed.x, homeBed.y, homeBed.w, homeBed.h);
+            // Подушка
+            ctx.fillStyle = 'white'; 
+            ctx.fillRect(homeBed.x + 10, homeBed.y + 10, homeBed.w - 20, 20);
+            ctx.fillText('ЛІЖКО', homeBed.x + 30, homeBed.y + 50);
+
+            // Вихід
+            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            ctx.fillRect(0, homeInterior.exitY, canvas.width, 100);
+            ctx.fillStyle = 'white'; ctx.fillText('ВИХІД ВНИЗ', canvas.width/2 - 40, canvas.height - 30);
+        }
+
+        // --- ГРАВЕЦЬ ---
+        if (isImageLoaded) {
+            ctx.drawImage(playerImage, player.x - player.size/2, player.y - player.size/2, player.size, player.size);
         } else {
             ctx.beginPath();
-            ctx.arc(player.x, player.y, player.size / 2, 0, Math.PI * 2);
-            ctx.fillStyle = 'gray'; 
-            ctx.fill();
-            ctx.strokeStyle = "black";
-            ctx.stroke();
+            ctx.arc(player.x, player.y, player.size/2, 0, Math.PI*2);
+            ctx.fillStyle = 'white'; ctx.fill(); ctx.stroke();
         }
 
-        // 2. Малюємо вудку (лише на березі)
+        // --- ВУДКА ---
         if (player.isFishing && currentScene === 'shore') {
             ctx.beginPath();
-            ctx.moveTo(player.x, player.y - player.size / 4); 
-            ctx.lineTo(waterZone.w / 2, canvas.height / 2); 
-            ctx.strokeStyle = "gray";
-            ctx.lineWidth = 2;
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.arc(waterZone.w / 2, canvas.height / 2, 5, 0, Math.PI * 2);
-            ctx.fillStyle = "red";
-            ctx.fill();
-            ctx.strokeStyle = "black";
-            ctx.lineWidth = 1;
-            ctx.stroke();
+            ctx.moveTo(player.x, player.y);
+            ctx.lineTo(waterZone.w/2, player.y);
+            ctx.strokeStyle = 'white'; ctx.lineWidth = 2; ctx.stroke();
+            ctx.beginPath(); ctx.arc(waterZone.w/2, player.y, 5, 0, Math.PI*2); ctx.fillStyle='red'; ctx.fill();
         }
 
-        // 3. Накладаємо ефект ДНЯ/НОЧІ поверх усього
-        ctx.fillStyle = getOverlayColor();
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-        // 4. Підказки 
-        ctx.fillStyle = "black";
-        ctx.font = "bold 14px 'Montserrat'";
-
-        const INTERACT_RANGE_HELP = INTERACT_RANGE * 1.5;
-
-        if (!player.isFishing) { 
-            if (currentScene === 'shore') {
-                const fishingSpotX = waterZone.w + player.size / 2; 
-                const distToFishing = Math.abs(player.x - fishingSpotX);
-
-                const shopEntranceX = shopEntranceZone.x - player.size / 2;
-                const distToShop = Math.abs(player.x - shopEntranceX);
-                
-                const homeEntranceX = homeEntranceZone.x + homeEntranceZone.w / 2;
-                const distToHome = Math.sqrt(
-                    Math.pow(player.x - homeEntranceX, 2) + 
-                    Math.pow(player.y - (homeEntranceZone.y + homeEntranceZone.h), 2)
-                );
-
-                if (distToFishing < INTERACT_RANGE_HELP) {
-                    ctx.fillText("Тисни ДІЮ (Ловити)", player.x + player.size / 2 + 5, player.y);
-                } 
-                else if (distToShop < INTERACT_RANGE_HELP) {
-                    ctx.fillText("Тисни ДІЮ (Магазин)", player.x - player.size / 2 - 80, player.y);
-                }
-                 else if (distToHome < INTERACT_RANGE_HELP * 1.5) {
-                    ctx.fillText("Тисни ДІЮ (Дім)", homeEntranceX - 40, homeEntranceZone.y + homeEntranceZone.h + 80);
-                }
-            } else if (currentScene === 'shop') {
-                const distToCrate = Math.sqrt(
-                    Math.pow(player.x - sellCrates.x, 2) + 
-                    Math.pow(player.y - sellCrates.y, 2)
-                );
-                const distToStand = Math.sqrt(
-                    Math.pow(player.x - upgradeStand.x, 2) + 
-                    Math.pow(player.y - upgradeStand.y, 2)
-                );
-                
-                 if (distToCrate < INTERACT_RANGE_HELP) {
-                    ctx.fillText("Тисни ДІЮ (Продати)", player.x + player.size / 2 + 5, player.y);
-                } else if (distToStand < INTERACT_RANGE_HELP) {
-                    ctx.fillText("Тисни ДІЮ (Купити)", player.x + player.size / 2 + 5, player.y);
-                } else if (player.y > shopInterior.exitY - player.size) {
-                     ctx.fillText("Йди вниз для Виходу", player.x - 70, player.y - 40);
-                }
-            } else if (currentScene === 'home') {
-                 const distToBed = Math.sqrt(
-                    Math.pow(player.x - homeInterior.bed.x, 2) + 
-                    Math.pow(player.y - homeInterior.bed.y, 2)
-                );
-                if (distToBed < INTERACT_RANGE_HELP * 2) {
-                    ctx.fillText("Тисни ДІЮ (Спати)", player.x + player.size / 2 + 5, player.y);
-                } else if (player.y > homeInterior.exitY - player.size) {
-                     ctx.fillText("Йди вниз для Виходу", player.x - 70, player.y - 40);
-                }
-            }
-        }
+        // --- ЕФЕКТ НОЧІ ---
+        ctx.fillStyle = getDayNightColor();
+        ctx.fillRect(0,0,canvas.width, canvas.height);
+        
+        // --- ПІДКАЗКИ ---
+        ctx.font = "16px Montserrat";
+        ctx.fillStyle = "white";
+        // Можна додати динамічні підказки біля об'єктів тут
     }
 
-    // Головний цикл гри
-    function gameLoop(currentTime) {
-        if (!gameReady) {
-            requestAnimationFrame(gameLoop);
-            return;
-        }
+    function gameLoop(timeMs) {
+        const dt = (timeMs - time.lastTime) / 1000;
+        time.lastTime = timeMs;
 
-        const deltaTime = currentTime - time.lastTime;
-        time.lastTime = currentTime;
-
-        // ВИПРАВЛЕННЯ: Передаємо дельту часу в секундах, тільки якщо вона не нуль (перший кадр)
-        const deltaTimeSeconds = deltaTime > 0 ? deltaTime / 1000 : 0; 
-        update(deltaTimeSeconds); 
+        if (dt < 0.1) update(dt); // Захист від стрибків часу
         draw();
         requestAnimationFrame(gameLoop);
     }
 
-    // Ресайз вікна
-    window.addEventListener('resize', () => {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-        updateZoneDimensions(); 
-    });
-    
-    // Ініціалізація та запуск
-    updateZoneDimensions(); 
-    // Якщо зображення не завантажиться, гра запуститься після playerImage.onerror/onload
-    if (playerImageLoaded) { 
-        gameLoop(0);
+    // Старт
+    updateZoneDimensions();
+    window.addEventListener('resize', updateZoneDimensions);
+    function startGame() {
+        time.lastTime = performance.now();
+        requestAnimationFrame(gameLoop);
     }
+
+    // Якщо картинка не грузиться довго - стартуємо все одно
+    setTimeout(() => { if(!isImageLoaded) startGame(); }, 1000);
+
 </script>
 </body>
 </html>
